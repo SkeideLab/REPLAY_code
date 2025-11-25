@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# VS Code / Jupyter
+.vscode/
+.ipynb_checkpoints/
+
+# virtual environments
+.env/
+.venv/
+
+# Norton
+_norton_/
