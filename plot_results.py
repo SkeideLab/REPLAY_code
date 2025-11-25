@@ -385,7 +385,7 @@ _,cbar = plot_sequenceness(
     ax=ax, 
     return_cbar_handle=True,
     plot_subs=dict(
-        color_values = participant_info['participant_included']['age_months'].to_numpy(),
+        color_values = participant_info['participant_included']['Age_Months'].to_numpy(),
         cmap = 'cool',
         cbar_title = ''
     )
@@ -459,7 +459,7 @@ axins.set_ylim([0.145,0.21])
 # axins.set_ylabel('')
 # axins.set_xticklabels('')
 # axins.set_yticklabels('')
-# axins.legend().remove()
+axins.legend().remove()
 plt.tight_layout(pad=0.05)
 # fig.savefig(os.path.join(
 #     graph_dir,
@@ -625,7 +625,7 @@ prerestbreak_peak = np.diff(tdlm_data['preresting_break']['sequenceness'][:,1::-
 wilcoxon_prerest_break = stats.wilcoxon( 
     rest_peak - prerestbreak_peak,
 )
-print(f"\nWilcoxon Test Prebreak: W = {wilcoxon_prerest_break.statistic}, p = {wilcoxon_prerest_break.pvalue}\n")
+print(f"\nWilcoxon Test Prerest break: W = {wilcoxon_prerest_break.statistic}, p = {wilcoxon_prerest_break.pvalue}\n")
 
 
 # Comparing Before Learning to after Learning - Functional ANOVA
@@ -733,7 +733,7 @@ axins.set_ylim([0.25,0.4])
 # axins.set_ylabel('')
 # axins.set_xticklabels('')
 # axins.set_yticklabels('')
-# axins.legend().remove()
+axins.legend().remove()
 # fig.savefig(os.path.join(
 #     graph_dir,
 #     'Results',
@@ -956,6 +956,8 @@ normalized_times = np.array(normalized_times)
 # Kolmogorov-Smirnov test against uniform distribution
 ks_stat, ks_pvalue = stats.kstest(normalized_times, 'uniform')
 
+print(f"\nKolmogrov Smirnoff Test: D = {ks_stat}, p = {ks_pvalue}\n")
+
 # Visualizations
 fig, axes = plt.subplots(
     1, 
@@ -1007,7 +1009,7 @@ fig, ax = plt.subplots()
 plot_cond(cond_data, 
           eeg_data['cued_replay']['times'], 
           ['apple','chair','face'], 
-          ax=ax,
+          axes=ax,
           axhline_kwargs = dict(y=0, color='k', linestyle='--'))
 ax.set_xlim([-0.2, 1.0])
 ax.set_ylim([-0.054, 0.154])
