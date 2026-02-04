@@ -16,6 +16,52 @@ import matplotlib.cm as cm
 from utils.utils import std_error
 
 
+### Helper Functions
+
+
+def strip_axis_labels(ax, xlabel=True, ylabel=True, xticklabels=True, yticklabels=True):
+    """
+    Remove axis labels and tick labels from a matplotlib axes object.
+
+    Useful for creating publication-ready figures where labels need to be
+    removed for cleaner appearance or added manually later.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes object to modify.
+    xlabel : bool, default=True
+        If True, remove the x-axis label.
+    ylabel : bool, default=True
+        If True, remove the y-axis label.
+    xticklabels : bool, default=True
+        If True, remove the x-axis tick labels.
+    yticklabels : bool, default=True
+        If True, remove the y-axis tick labels.
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+        The modified axes object.
+
+    Examples
+    --------
+    >>> fig, ax = plt.subplots()
+    >>> ax.plot([1, 2, 3], [1, 4, 9])
+    >>> strip_axis_labels(ax)  # Remove all labels
+    >>> strip_axis_labels(ax, xlabel=False)  # Keep x-axis label only
+    """
+    if xlabel:
+        ax.set_xlabel('')
+    if ylabel:
+        ax.set_ylabel('')
+    if xticklabels:
+        ax.set_xticklabels([])
+    if yticklabels:
+        ax.set_yticklabels([])
+    return ax
+
+
 ### Preprocessing Plot Functions
 
 
@@ -833,23 +879,99 @@ def plot_topo_cond(data, x, channels, labels, **kwargs):
 # Plot Classifier
 
 def plot_sliding_classifier(data, time, **kwargs):
-    
-    # Extracting optional parameters with defaults
+    """
+    Plot time-resolved classifier performance with optional significance markers.
+
+    Creates a publication-ready plot of sliding window classifier results,
+    showing mean performance over time with standard error shading and
+    markers for statistically significant time clusters.
+
+    Parameters
+    ----------
+    data : numpy.ndarray
+        Classification performance data with shape:
+        - 1D: (n_timepoints,) for single subject/pre-averaged data
+        - 2D: (n_subjects/folds, n_timepoints) for group-level analysis
+    time : numpy.ndarray
+        Time vector in seconds corresponding to each timepoint.
+
+    Keyword Arguments
+    -----------------
+    average : bool, default=True
+        If True, compute and display mean +/- standard error across first axis.
+        If False, plot all traces without averaging.
+    chance : float, default=0.5
+        Chance level for classifier (displayed as horizontal dashed line).
+    se_alpha : float, default=0.2
+        Alpha transparency for standard error shading.
+    perm_info : dict, optional
+        Permutation test results for significance marking. Expected keys:
+        - 'cluster_dict': list of cluster dictionaries from permutation test
+        - 'statistic': str, name of statistic ('cluster_area' or 'cluster_tsum')
+        - 'cluster_max_pval': float, threshold for significance
+    line_kwargs : dict, default=dict(linestyle='-', color='tab:blue')
+        Keyword arguments passed to ax.plot() for the main line.
+    fill_kwargs : dict, default=dict(color='tab:blue')
+        Keyword arguments passed to ax.fill_between() for error shading.
+    sct_kwargs : dict, default=dict(s=15, marker='o', color='tab:blue')
+        Keyword arguments passed to ax.scatter() for significance markers.
+    ax : matplotlib.axes.Axes, optional
+        Axes object to plot on. If None, creates new figure and axes.
+    save : str, optional
+        File path to save the figure. If None, figure is not saved.
+    return_handles : bool, default=False
+        If True, returns (fig, ax) tuple.
+
+    Returns
+    -------
+    matplotlib.axes.Axes or tuple
+        Returns the axes object, or (fig, ax) tuple if return_handles=True.
+
+    Examples
+    --------
+    >>> # Basic plot with significance markers
+    >>> plot_sliding_classifier(
+    ...     classifier_scores,  # shape (20, 100)
+    ...     times,              # shape (100,)
+    ...     perm_info=perm_results,
+    ...     chance=1/3
+    ... )
+    >>>
+    >>> # Custom styling on existing axes
+    >>> fig, ax = plt.subplots()
+    >>> plot_sliding_classifier(
+    ...     scores, times, ax=ax,
+    ...     line_kwargs=dict(color='red', linewidth=2),
+    ...     fill_kwargs=dict(color='red'),
+    ...     se_alpha=0.3
+    ... )
+    """
+    # Extract optional parameters with defaults
     average = kwargs.get('average', True)
     save = kwargs.get('save', None)
     chance = kwargs.get('chance', 0.5)
     se_alpha = kwargs.get('se_alpha', 0.2)
     perm_info = kwargs.get('perm_info', None)
-    sct_kwargs = kwargs.get('sct_kwargs', dict(s=15, marker='o', color='b'))
+    line_kwargs = kwargs.get('line_kwargs', dict(linestyle='-', color='tab:blue'))
+    fill_kwargs = kwargs.get('fill_kwargs', dict(color='tab:blue'))
+    sct_kwargs = kwargs.get('sct_kwargs', dict(s=15, marker='o', color='tab:blue'))
     ax = kwargs.get('ax', None)
     return_handles = kwargs.get('return_handles', False)
-    
+
+    # Set alpha for fill
+    fill_kwargs['alpha'] = se_alpha
+
+    # Create figure if no axes provided
     if ax is None:
-        fig, ax = plt.subplots(figsize=(4,4))
-    
-    xtickmarks = np.arange(np.min(time), np.max(time)+0.1, 0.1)
-    xticklabels = ['' if int(t*10) % 2 else f'{1000*t:4.0f}' for t in xtickmarks]                    
-    
+        fig, ax = plt.subplots(figsize=(4, 4))
+    else:
+        fig = ax.get_figure()
+
+    # Configure x-axis ticks (every 100ms, labeled every 200ms)
+    xtickmarks = np.arange(np.min(time), np.max(time) + 0.1, 0.1)
+    xticklabels = ['' if int(t * 10) % 2 else f'{1000 * t:4.0f}' for t in xtickmarks]
+
+    # Compute mean and standard error if averaging
     if average:
         if data.ndim == 2:
             mean_data = np.mean(data, axis=0)
@@ -859,29 +981,48 @@ def plot_sliding_classifier(data, time, **kwargs):
             stderr_data = np.zeros(data.shape)
     else:
         mean_data = data.T
-        
-    
+
+    # Plot reference lines
     ax.axhline(chance, color="k", linestyle="--")
     ax.axvline(0.0, color="k", linestyle="-")
-    ax.plot(time, mean_data)
+
+    # Plot data
+    ax.plot(time, mean_data, **line_kwargs)
     if average:
-        ax.fill_between(time, mean_data - stderr_data, mean_data + stderr_data, 
-                        alpha=se_alpha)
+        ax.fill_between(time, mean_data - stderr_data, mean_data + stderr_data,
+                        **fill_kwargs)
+
+    # Configure axes
     ax.set_xticks(xtickmarks)
     ax.set_xticklabels(xticklabels)
-    ax.set_xlabel("times (ms)")
-    ax.set_ylabel("classification accuracy (%)")  # Area Under the Curve
+    ax.set_xlabel("Time (ms)")
+    ax.set_ylabel("Classification Performance")
+
+    # Add significance markers from permutation test
     if average and perm_info:
-        for pi in perm_info['cluster_dict']:
-            if pi[perm_info['statistic']+'_pval'] > (1-perm_info['cluster_max_pval']):
-                ax.scatter(time[pi['cluster_index'][:,-1]], (chance-0.02)*np.ones(pi['cluster_index'].shape[0]), **sct_kwargs)
-                #ax.axvspan(time[pi['cluster_index'][0]], time[pi['cluster_index'][1]], color='red', alpha=0.3, edgecolor=None)
+        cluster_dict = perm_info.get('cluster_dict', [])
+        statistic = perm_info.get('statistic', 'cluster_tsum')
+        cluster_max_pval = perm_info.get('cluster_max_pval', 0.05)
+        
+        for key in cluster_dict.keys():
+            for cluster in cluster_dict[key]:
+                pval = cluster.get(f'{statistic}_pval', 0.0)
+                if pval > (1 - cluster_max_pval):
+                    cluster_idx = cluster['cluster_index'][:, -1]
+                    ax.scatter(
+                        time[cluster_idx],
+                        (chance - 0.02) * np.ones(len(cluster_idx)),
+                        **sct_kwargs
+                    )
+
+    # Save figure if path provided
     if save:
         plt.savefig(save, bbox_inches='tight')
+
+    # Return handles
     if return_handles:
         return fig, ax
-    if ax is not None:
-        return ax
+    return ax
 
 
 
