@@ -50,6 +50,8 @@ Spreadsheet containing demographic and trial inclusion information.
 | `Sequence_Presentations` |  Amount of Sequence Presentations used for analyses. |
 | `Sequence_Presentations_Percent` | Percent of Sequence Presentations used for analyses. |
 
+---
+
 ### clusterdepth_pvals.npz
 
 Pre-computed cluster-depth-based permutation test results for cued replay analysis. Permutation tests were computed in R using the permuco package.
