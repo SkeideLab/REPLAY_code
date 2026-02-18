@@ -35,9 +35,24 @@ age_filtered = pinfo[(pinfo['age_months'] >= 6) & (pinfo['age_months'] <= 12)]
 
 ---
 
+### trial_info.csv
+
+Spreadsheet containing demographic and trial inclusion information.
+
+**Columns:**
+| Column | Description |
+|--------|-------------|
+| `Participant` | Unique participant identifier |
+| `Age` | Age at testing in months |
+| `Gender` | Participant gender (M/F) |
+| `Localizer_Trials` | Amount of Localizer Trials used for analyses. |
+| `Localier_Trials_Percent` | Percent of Localizer Trials used for analyses. |
+| `Sequence_Presentations` |  Amount of Sequence Presentations used for analyses. |
+| `Sequence_Presentations_Percent` | Percent of Sequence Presentations used for analyses. |
+
 ### clusterdepth_pvals.npz
 
-Pre-computed cluster-based permutation test results for cued replay analysis.
+Pre-computed cluster-depth-based permutation test results for cued replay analysis. Permutation tests were computed in R using the permuco package.
 
 **Contents:**
 - `cluster_pval1`: P-values for stimulus category 1 (Apple)
