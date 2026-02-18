@@ -132,6 +132,7 @@ participant_info['localizer_ratings'] = pd.DataFrame()
 participant_info['localizer_cohkappa'] = np.zeros(len(sample_mask))
 
 participant_info['loc_trialnum'] = np.zeros((len(sample_mask), 3))
+participant_info['seq_reps'] = np.zeros((len(sample_mask), 1))
 participant_info['time_rest'] = np.zeros((len(sample_mask), 1))
 for p,idx in enumerate(tqdm(sample_mask, desc="Subject Ratings loaded")):
 
@@ -145,7 +146,12 @@ for p,idx in enumerate(tqdm(sample_mask, desc="Subject Ratings loaded")):
     participant_info['time_rest'][p,:] = np.prod(
         eeg_data['resting']['data'][idx].shape[0:3:2]
     )/100
-
+    
+    # Amount of Sequence Presentations
+    participant_info['seq_reps'][p,:] = np.sum(
+        eeg_data['seq_learn']['trial_labels'][idx]
+    )
+    
     rater1 = pd.read_csv(os.path.join(
         raw_dir,
         'ratings',
@@ -202,6 +208,21 @@ participant_info['std_trlrej_loc'] = np.std(
 participant_info['mean_time_rest'] = np.mean(participant_info['time_rest'])
 participant_info['std_time_rest'] = np.std(participant_info['time_rest'])
 
+# Save Trial Info to csv
+loc_trialnum_sum = participant_info['loc_trialnum'].sum(axis=1)
+seq_reps = participant_info['seq_reps'].flatten()
+trial_info_df = pd.DataFrame({
+    'Participant': [f'{i+1}' for i in range(len(loc_trialnum_sum))],
+    'Age': participant_info['participant_included']['Age_Months'],
+    'Gender': participant_info['participant_included']['Gender'],
+    'Localizer_Trials': loc_trialnum_sum,
+    'Localizer_Trials_Percent': loc_trialnum_sum / 540,
+    'Sequence_Presentations': seq_reps,
+    'Sequence_Presentations_Percent': seq_reps / 100,
+})
+trial_info_df.to_csv(
+    os.path.join(code_dir, 'additional_data', 'trial_info.csv'), index=False
+)
 
 # %% Classifier Analysis on Localizer Data
 
