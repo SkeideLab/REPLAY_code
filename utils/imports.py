@@ -9,7 +9,139 @@ Import Helper Functions.
 
 import os
 import mne
+from tqdm import tqdm
 import numpy as np
+import pandas as pd
+
+
+def import_raw_data_replay_things(directory, sub, data, event_dict=None):
+
+    if data == 'eeg':    
+        
+        if 'Baby' in sub:
+            
+            if sub[9:] in ['1','2','3']:
+                
+                temp = mne.io.read_raw_brainvision(
+                    os.path.join(
+                        directory,
+                        data,
+                        sub,
+                        f'Replay_Things_BabyPilot_{''.join(x for x in sub if x.isdigit())}.vhdr'), 
+                    preload=True, verbose=True)
+                events_temp, event_ids_temp = mne.events_from_annotations(temp)
+                
+                pause_idx = [i for i in np.where(events_temp[:,2] == 240)[0] 
+                             if events_temp.shape[0] > i+1 and 
+                             events_temp[i+1,2] != 249]
+                for ia in tqdm(reversed(pause_idx), 
+                               desc = 'Annotations rewritten'):
+                    an1 = temp.annotations[ia]
+                    temp.annotations.append(onset = an1['onset'], 
+                                            duration = an1['duration'], 
+                                            description = 'Stimulus/S220')
+                    temp.annotations.delete(ia)
+                    an2 = temp.annotations[ia+1]
+                    temp.annotations.append(onset = an2['onset']-0.5, 
+                                            duration = an2['duration'], 
+                                            description = 'Stimulus/S229')
+                
+            elif sub[9:] in ['4']:
+                
+                temp1 = mne.io.read_raw_brainvision(
+                    os.path.join(
+                        directory,
+                        data,
+                        sub,
+                        f'REPLAY_Things_BabyPilot_{''.join(x for x in sub if x.isdigit())}_1.vhdr'), 
+                    preload=True, verbose=True)
+                temp2 = mne.io.read_raw_brainvision(
+                    os.path.join(
+                        directory,
+                        data,
+                        sub,
+                        f'REPLAY_Things_BabyPilot_{''.join(x for x in sub if x.isdigit())}_2.vhdr'),
+                    preload=True, verbose=True)
+                
+                events_temp, _ = mne.events_from_annotations(temp1)
+                temp1.crop(0.0, events_temp[-1,0]/1000+30.0)
+                
+                temp = mne.concatenate_raws([temp1, temp2])
+            elif sub[9:] in ['6']:
+                
+                temp = mne.io.read_raw_brainvision(
+                    os.path.join(
+                        directory,
+                        data,
+                        sub,
+                        f'REPLAY_Things_BabyPilot_{''.join(x for x in sub if x.isdigit())}.vhdr'),
+                    preload=True, verbose=True)
+                
+                events_temp, _ = mne.events_from_annotations(temp)
+                temp.crop(events_temp[np.where(events_temp[:,2] == 20)[0][-1],0]/1000-10.0, 
+                          temp.times[-1])
+                
+            else:
+                
+                temp = mne.io.read_raw_brainvision(
+                    os.path.join(
+                        directory,
+                        data,
+                        sub,
+                        f'REPLAY_Things_BabyPilot_{''.join(x for x in sub if x.isdigit())}.vhdr'),
+                    preload=True, verbose=True)
+            
+            events_temp, event_ids_temp = mne.events_from_annotations(temp)
+            events_temp = np.vstack([events_temp.T, np.arange(events_temp.shape[0])]).T
+            events_temp = np.array([i for i in events_temp if i[-2] in event_dict.values()])
+            events_temp = np.vstack([events_temp, events_temp[-1,] + [15,0,1200,-13]])
+            forward_transitions = {220: 229, 230: 239, 240: 249}
+            backward_transitions = {229: 220, 239: 230, 249: 240}
+            irregular_indices = []
+            # Iterate through the events array
+            for i in range(len(events_temp) - 1):
+                current_event = events_temp[i, -2]
+                next_event = events_temp[i + 1, -2]
+        
+                # Check if the current event has an expected next event
+                if current_event in forward_transitions.keys():
+                    # If it does, check if the next event matches the expected one
+                    if next_event != forward_transitions[current_event]:
+                        irregular_indices.append([i, forward_transitions[current_event]])
+                if next_event in backward_transitions.keys():
+                    # If it does, check if the next event matches the expected one
+                    if current_event != backward_transitions[next_event]:
+                        irregular_indices.append([i, backward_transitions[next_event]])
+            for i in reversed(irregular_indices):
+                time = temp.annotations[events_temp[i[0],-1]]['onset']
+                dur = temp.annotations[events_temp[i[0],-1]]['duration']
+                temp.annotations.append(onset = time+1.0, 
+                                        duration = dur, 
+                                        description = f'Stimulus/S{i[-1]:2}')
+        
+        else:
+            
+            temp = mne.io.read_raw_brainvision(
+                os.path.join(
+                    directory,
+                    data,
+                    sub,
+                    f'REPLAY_sub-{sub}.vhdr'),
+                preload=True, verbose=True) 
+        
+        return temp
+        
+    elif data == 'psychopy':
+        
+        logfile_path = [f for f in os.listdir(os.path.join(directory,data,sub)) 
+                        if sub+'_Replay_Things' in f and 
+                        'csv' in f][-1]
+        Logfile = pd.read_csv(os.path.join(directory,
+                                           data,
+                                           sub,
+                                           logfile_path))
+
+        return Logfile
 
 
 def import_preproc_data_replay_things(base_dir, preproc_dir, 

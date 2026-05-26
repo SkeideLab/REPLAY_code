@@ -25,15 +25,17 @@ from sklearn.pipeline import make_pipeline, Pipeline
 from sklearn.preprocessing import StandardScaler
 from utils.TDLM import TDLM, create_transition_matrix
 from utils.CrossDecoding_MEEG import CrossDecoding_MEEG
-from utils.imports import import_preproc_data_replay_things
+from utils.imports import ( 
+    import_preproc_data_replay_things
+    )
 from utils.utils import sign_flip_permtest
 
 
 # %% Define necessary paths
 
 code_dir = os.path.join('')
-raw_dir = os.path.join("X:\\","REPLAY","raw","Things") #os.path.join('')
-preproc_dir = os.path.join("X:\\","REPLAY","preprocessed","Things") #os.path.join('')
+raw_dir = os.path.join("X:\\","REPLAY (2)","raw","Things") #os.path.join('')
+preproc_dir = os.path.join("X:\\","REPLAY (2)","preprocessed","Things") #os.path.join('')
 
 
 # %% Parameters
@@ -711,6 +713,7 @@ perm_info = {
     }
 
 del temp, cur_data
+
 
 
 # %% Save Analysis Data (Optional - skip in interactive sessions)
