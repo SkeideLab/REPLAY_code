@@ -7,33 +7,49 @@ Analysis pipeline for detecting sequential neural replay patterns in infant EEG 
 
 ## Overview
 
-This project implements a complete EEG analysis workflow to detect memory replay during rest and learning in infants. The pipeline includes:
+This project implements a complete EEG analysis workflow to detect memory replay during rest, cued reactivation, and sequence learning in infants. Two age groups are processed in parallel throughout the pipeline:
 
-- Loading and preprocessing EEG data
-- Training logistic regression classifiers on localizer stimuli
-- Cross-temporal decoding across experimental segments
-- Temporally Delayed Linear Model (TDLM) analysis for sequenceness detection
-- Statistical inference via permutation testing
-- Publication-quality visualizations
+- **old**: 10–13 months
+- **young**: 6–9 months
+
+The pipeline includes:
+
+- Participant filtering and EEG preprocessing (band-pass filtering, decimation)
+- Time-resolved logistic-regression decoding of localizer stimuli (Apple, Chair, Face)
+- Cross-temporal decoding of stimulus probabilities into resting/replay/learning segments
+- Cross-correlation based sequenceness analysis (forward vs. backward replay)
+- Sign-flip and label-switch permutation testing (within- and between-group)
+- Welch PSD / individual theta-peak analysis
+- Publication-quality visualizations, including a set of schematic methods figures
 
 ## Project Structure
 
 ```
 REPLAY_code/
-├── load_transform_data.py    # Main analysis pipeline
-├── plot_results.py           # Results visualization
-├── utils/                    # Utility modules
-│   ├── imports.py            # Data import functions
-│   ├── utils.py              # Statistical helpers
-│   ├── TDLM.py               # Temporal sequenceness analysis
-│   ├── CrossDecoding_MEEG.py # Cross-temporal decoding
-│   └── plots.py              # Plotting utilities
-├── additional_data/          # Data files
-│   ├── participant_info.xlsx # Participant metadata
-│   └── clusterdepth_pvals.npz# Pre-computed statistics
+├── load_data.py               # Main pipeline: loads data, decodes, computes sequenceness & frequency stats
+├── plot_results.py            # Main results figures (run after load_data.py, same session)
+├── plot_supplement.py         # Supplementary figures (run after load_data.py, same session)
+├── plot_methods.py            # Standalone schematic simulations for the methods figure
+├── utils/                     # Utility package
+│   ├── paths.py                # Central path configuration (edit before running)
+│   ├── imports.py              # Things_Importer + get_additional_data
+│   ├── decode.py                # Localizer sliding classifier (run_decode)
+│   ├── CrossDecoding_MEEG.py   # Cross-temporal decoding estimator
+│   ├── xdecode.py               # Cross-decoding across segments (run_xdecode)
+│   ├── CrossCorrelation.py      # Cross-correlation sequenceness model
+│   ├── xcorr.py                  # Sequenceness + permutation tests
+│   ├── freq.py                    # Welch PSD / theta-peak analysis (run_freq_analysis)
+│   ├── utils.py                    # chan_grid, std_error, permutation-test helpers
+│   └── plots.py                     # Plotting utilities
+├── additional_data/            # Participant metadata and generated trial summaries
+│   ├── participants_info.xlsx    # Participant registry (input)
+│   ├── trial_info_old.csv         # Per-participant trial counts, old group (generated)
+│   └── trial_info_young.csv        # Per-participant trial counts, young group (generated)
 ├── LICENSE
 └── pyproject.toml
 ```
+
+See [utils/README.md](utils/README.md) and [additional_data/README.md](additional_data/README.md) for details on each module and data file.
 
 ## Installation
 
@@ -42,9 +58,12 @@ REPLAY_code/
 - Python >= 3.10
 - MNE-Python (EEG data handling)
 - NumPy, SciPy, Pandas
-- Scikit-learn (classifiers)
-- Matplotlib, Seaborn (visualization)
-- Openpyxl (Excel file reading)
+- Scikit-learn (classifiers, permutation tests)
+- Scikit-image (cluster labeling for permutation tests)
+- Matplotlib (visualization)
+- tqdm (progress bars)
+- python-calamine (fast `.xlsx` reading via `pandas.read_excel(engine="calamine")`)
+- A Qt binding (e.g. PyQt6) for the interactive `qtagg` Matplotlib backend used by the `plot_*.py` scripts
 
 ### Setup
 
@@ -57,87 +76,102 @@ cd REPLAY/Analysis/REPLAY_code
 pip install -e .
 
 # Or install dependencies directly
-pip install mne numpy scipy pandas scikit-learn matplotlib seaborn openpyxl
+pip install numpy scipy pandas scikit-learn scikit-image mne tqdm matplotlib python-calamine pyqt6
 ```
+
+### Configuration
+
+Before running anything, edit the placeholder paths in [utils/paths.py](utils/paths.py):
+
+| Constant | Purpose |
+|----------|---------|
+| `RAW_DIR` | Raw data root (behavioral coding / attention ratings) |
+| `PREPROC_DIR` | Preprocessed EEG segment root (expects `Segments/<Localizer\|Resting\|CuedReplay\|LearnSequence\|PreResting>/`) |
+| `GRAPHICS_DIR` | Figure output root — create `Results/` and `Paradigm/` subfolders before running the plotting scripts |
+
+`INFO_DIR` (→ `additional_data/`) and `UTILS_DIR` are resolved automatically relative to the repo.
 
 ## Usage
 
-### Main Analysis Pipeline
+The scripts are written to be run interactively (e.g. cell-by-cell in Spyder, a VS Code Interactive Window, or Jupyter) rather than as isolated subprocess calls: `plot_results.py` and `plot_supplement.py` reference variables (`eeg_data_old`, `classifier_data_young`, `xcorr_data_diff`, …) that only exist once `load_data.py` has been executed in the same session.
 
-The primary analysis is performed via `load_transform_data.py`:
+### 1. Load, decode, and analyze
 
 ```python
-# Run the full analysis pipeline
-python load_transform_data.py
+# Run in an interactive session — populates the workspace used by the plotting scripts
+exec(open("load_data.py").read())
 ```
 
 This script:
-1. Loads preprocessed EEG segments (localizer, resting, cued replay, sequence learning)
-2. Trains classifiers on localizer stimuli (Apple, Chair, Face)
-3. Applies cross-temporal decoding
-4. Computes TDLM sequenceness measures
-5. Saves results for visualization
+1. Loads `participants_info.xlsx` and splits participants into the **old** and **young** age groups
+2. Loads and preprocesses EEG segments (localizer, resting, cued replay, sequence learning, pre-resting) per group
+3. Computes per-participant descriptive stats (trial counts, resting duration, inter-rater Cohen's kappa) and writes `additional_data/trial_info_old.csv` / `trial_info_young.csv`
+4. Trains a sliding logistic-regression classifier on localizer stimuli and tests it against chance with a sign-flip cluster permutation test
+5. Cross-decodes localizer-trained classifiers onto each segment
+6. Computes cross-correlation sequenceness (forward/backward/net) per segment, with sign-flip max-statistic permutation tests
+7. Runs between-group (old vs. young) and within-group (`cued_replay` vs. `seq_learn` / `preresting`) label-switch permutation comparisons
+8. Runs a Welch PSD / individual theta-peak analysis on the cued-replay segment
 
-### Generating Figures
+### 2. Generate figures
+
+In the **same session**, after `load_data.py` has run:
 
 ```python
-# Generate publication figures
-python plot_results.py
+exec(open("plot_results.py").read())  # main figures
+exec(open("plot_supplement.py").read())  # supplementary figures
 ```
 
-Creates visualizations including:
-- Time-resolved decoding curves
-- Spatial patterns and topographies
-- Sequenceness time-lag plots
-- Transition matrix comparisons
-
-### Using Individual Modules
+`plot_methods.py` is independent of the loaded data (it only simulates schematic curves for the methods figure) and can be run on its own:
 
 ```python
-from utils.imports import import_preproc_data_replay_things
-from utils.TDLM import TDLM, create_transition_matrix
-from utils.CrossDecoding_MEEG import CrossDecoding_MEEG
+exec(open("plot_methods.py").read())
+```
 
-# Load data
-participant_info, eeg_data, behavioral_data = import_preproc_data_replay_things(
-    segment=['localizer', 'resting'],
-    resample_to=100
-)
+### Using individual modules
 
-# Create transition matrix for hypothesis testing
-trans_matrix = create_transition_matrix(n_states=3, hypothesis='forward')
+```python
+from utils.imports import Things_Importer
+from utils.CrossCorrelation import CrossCorrelationSequenceness
+from utils.xcorr import run_xcorr
 
-# Run TDLM analysis
-tdlm = TDLM(max_lag=600, bin_lag=8)
-sequenceness = tdlm.fit(classifier_probs, trans_matrix)
+importer = Things_Importer(info_dir=INFO_DIR, preproc_dir=PREPROC_DIR)
+participant_info = importer.get_participant_info()
+eeg_data = importer.get_eeg_data(sample_mask=participant_info["participants_incl"])
+
+# Cross-correlation sequenceness for a single participant
+xcorr_model = CrossCorrelationSequenceness(max_lag=50)
+tm = np.array([[0, 1, 0], [0, 0, 1], [0, 0, 0]])  # forward: state0 -> state1 -> state2
+sequenceness = xcorr_model.fit(stimulus_probs, classes, model_tm=tm)  # (3, max_lag): fwd, bwd, net
 ```
 
 ## Experimental Segments
 
 | Segment | Description |
 |---------|-------------|
-| `localizer` | Training data with known stimulus labels |
+| `localizer` | Training data with known stimulus labels (Apple, Chair, Face) |
 | `resting` | Spontaneous activity for replay detection |
-| `pre_resting` | Baseline before learning |
 | `cued_replay` | Stimulus-cued reactivation during resting |
 | `seq_learn` | Activity during sequence presentation |
+| `preresting` | Baseline before learning (merged `PreResting` + `PreResting_Break` epochs) |
 
 ## Key Methods
 
 ### Cross-Temporal Decoding
-Trains classifiers at specific timepoints and tests across all timepoints to identify temporal generalization patterns.
+`CrossDecoding_MEEG` (scikit-learn compatible) trains a classifier at one localizer timepoint per participant and applies it across all timepoints of a target segment, yielding per-class stimulus-probability time series.
 
-### TDLM (Temporally Delayed Linear Model)
-Detects sequential reactivation by modeling lagged relationships between classifier outputs, identifying forward and backward replay.
+### Cross-Correlation Sequenceness
+`CrossCorrelationSequenceness` computes the lagged Pearson cross-correlation between stimulus-probability time series and projects it onto a transition matrix to obtain forward, backward, and net (forward − backward) sequenceness — the cross-correlation analogue of TDLM-style sequenceness analysis.
 
 ### Permutation Testing
-Cluster-based sign-flip permutation tests for statistical inference on sequenceness measures.
+- `sign_flip_permtest`: within-group cluster- or max-statistic sign-flip permutation test (used for classifier-vs-chance and sequenceness-vs-zero tests).
+- `label_switch_permtest`: between/within-group two-sample permutation test via label switching (used for old-vs-young and within-group segment contrasts).
 
 ## Output
 
 Results are saved to:
-- `../Results/` - Processed data arrays (NPZ format)
-- `../../Graphics/Results/` - Figures (SVG/PNG format)
+- `additional_data/trial_info_old.csv`, `additional_data/trial_info_young.csv` — per-participant trial summaries
+- `<GRAPHICS_DIR>/Results/` — main and supplementary figures (PNG/SVG)
+- `<GRAPHICS_DIR>/Paradigm/` — schematic methods figures (SVG)
 
 ## Citation
 
@@ -149,4 +183,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## References
 Christopher M. Postzich, Johanna Finnemann, Michael A. Skeide
-bioRxiv 2025.06.12.659246; doi: https://doi.org/10.1101/2025.06.12.659246 
+bioRxiv 2025.06.12.659246; doi: https://doi.org/10.1101/2025.06.12.659246
